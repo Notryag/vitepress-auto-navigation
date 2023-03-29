@@ -1,8 +1,13 @@
 {
   "name": "vitepress-auto-navigation",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "vitepress markdown nav",
-  "keywords": ["vitepress", "markdown", "blog", "nav"],
+  "keywords": [
+    "vitepress",
+    "markdown",
+    "blog",
+    "nav"
+  ],
   "main": "lib/index.js",
   "scripts": {
     "dev": "rollup -c ./rollup.config.mjs -w",
