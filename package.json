@@ -12,6 +12,11 @@
     "lib",
     "types"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Notryag/vitepress-auto-navigation.git"
+  },
+  "homepage": "https://github.com/Notryag/vitepress-auto-navigation.git",
   "author": "Notray",
   "license": "MIT",
   "devDependencies": {
