@@ -1,8 +1,8 @@
-import * as fs from "fs"
-import * as path from "path"
-import { formatFileInfos, isMarkDown, formatFileName } from "./utils"
-import type { DefaultTheme } from "vitepress/types/default-theme"
-import type { FileInfo, Option } from "../types/custom"
+import * as fs from 'fs'
+import * as path from 'path'
+import { formatFileInfos, isMarkDown, formatFileName } from './utils'
+import type { DefaultTheme } from 'vitepress/types/default-theme'
+import type { FileInfo, Option } from '../types/custom'
 
 /**
  * 获取指定目录下的所有文件和子目录
@@ -14,7 +14,7 @@ function getFiles(dir: string, level = 1, filesMap: { [key: string]: any } = {})
   const files = fs.readdirSync(dir)
   const result = [] as FileInfo[]
   files.forEach((file) => {
-    const filePath = path.join(dir, file).toString().replace(/\\/g, "/")
+    const filePath = path.join(dir, file).toString().replace(/\\/g, '/')
     const stats = fs.statSync(filePath)
     if (stats.isDirectory()) {
       // 递归读取子目录
@@ -25,9 +25,8 @@ function getFiles(dir: string, level = 1, filesMap: { [key: string]: any } = {})
         level,
         parentPath: dir,
       }
-      result.push(fileObj)
       const subFiles = getFiles(filePath, level + 1, filesMap)
-      result.push(...subFiles)
+      result.push(fileObj, ...subFiles)
       filesMap[filePath] = fileObj
     } else if (isMarkDown(file)) {
       // 存储文件名和路径
@@ -43,20 +42,14 @@ function getFiles(dir: string, level = 1, filesMap: { [key: string]: any } = {})
     }
   })
 
-  return result.sort((a, b) => {
-    if (a.level !== b.level) {
-      return a.level - b.level
-    } else {
-      return b.isDirectory ? 1 : -1
-    }
-  })
+  return result.sort((a, b) => a.level - b.level || (b.isDirectory ? 1 : -1));
 }
 
 const addSidebarItem = (sidebarMap: { [key: string]: any }, dir: { path: string }, file: { name: string; path: string; isDirectory: boolean }) => {
   if (!sidebarMap[dir.path]) {
     sidebarMap[dir.path] = [
       {
-        text: "other",
+        text: 'other',
         items: [],
       },
     ]
@@ -74,7 +67,7 @@ const addSidebarItem = (sidebarMap: { [key: string]: any }, dir: { path: string 
   }
 }
 
-export default function genNav(option: Option = {baseurl: './blog'}): {
+export default function genNav(option: Option = { baseurl: './blog' }): {
   nav: DefaultTheme.NavItem[]
   sidebar: DefaultTheme.Sidebar
 } {
@@ -83,40 +76,47 @@ export default function genNav(option: Option = {baseurl: './blog'}): {
 
   let nav: DefaultTheme.NavItem[] = []
   const sidebarMap: DefaultTheme.Sidebar = {}
-
+  const sidebar: DefaultTheme.Sidebar = {}
   const rootDirs = files.filter((file: FileInfo) => file.isDirectory && file.level == 1)
-  rootDirs.map((dir) => {
+
+  for (const dir of rootDirs) {
     dir.items = []
-    files.forEach((file) => {
+    for (const file of files) {
       if (file.parentPath === dir.path) {
         addSidebarItem(sidebarMap, dir, file)
       }
-    })
-  })
-  Object.entries(sidebarMap).map(([key, val]) => {
-    files.forEach((file) => {
+    }
+  }
+
+
+  for (const key of Object.keys(sidebarMap)) {
+    const val = sidebarMap[key]
+    for (const file of files) {
       if (file.path.includes(key) && !file.isDirectory) {
-        let index = val.findIndex((item) => file.path.includes(item.text))
-        if (index === -1) return
+        const index = val.findIndex((item) => file.path.includes(item.text))
+        if (index === -1) continue
         val[index].items.push(formatFileInfos(file))
       }
-    })
-  })
+    }
+  }
 
   for (const [key, value] of Object.entries(sidebarMap)) {
-    sidebarMap[key] = value.filter((item) => item.items.length > 0)
+    const sidebarItem = value.filter((item) => item.items.length > 0)
+    if(sidebarItem.length === 0) continue
+    sidebar[key] = sidebarItem
     nav.push({
       text: filesMap[key].name,
       items: value.reduce<DefaultTheme.NavItemWithLink[]>((pre, cur) => {
         let first = cur.items[0]
         if (!first) return pre
-        pre.push({ text: cur.text === "other" ? first.text : cur.text, link: first.link })
+        pre.push({ text: cur.text === 'other' ? first.text : cur.text, link: first.link })
         return pre
       }, []),
     })
   }
+
   return {
     nav,
-    sidebar: sidebarMap,
+    sidebar,
   }
 }
