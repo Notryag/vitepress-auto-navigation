@@ -6,9 +6,10 @@ import type { FileInfo, Option } from '../types/custom'
 
 /**
  * 获取指定目录下的所有文件和子目录
- * @param {string} dir 目录路径
- * @param {number} level 目录层级
- * @returns {Array} 文件和子目录数组
+ * @param dir 目录路径
+ * @param level 目录层级
+ * @param filesMap 文件和子目录数组
+ * @returns 文件和子目录数组
  */
 function getFiles(dir: string, level = 1, filesMap: { [key: string]: any } = {}): FileInfo[] {
   const files = fs.readdirSync(dir)
@@ -45,6 +46,12 @@ function getFiles(dir: string, level = 1, filesMap: { [key: string]: any } = {})
   return result.sort((a, b) => a.level - b.level || (b.isDirectory ? 1 : -1));
 }
 
+/**
+ * Adds a sidebar item to the sidebar map.
+ * @param sidebarMap - The sidebar map object.
+ * @param dir - The directory object.
+ * @param file - The file object.
+ */
 const addSidebarItem = (sidebarMap: { [key: string]: any }, dir: { path: string }, file: { name: string; path: string; isDirectory: boolean }) => {
   if (!sidebarMap[dir.path]) {
     sidebarMap[dir.path] = [
