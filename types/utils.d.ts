@@ -1,4 +1,3 @@
-import * as path from "path";
 /**
  * 格式化文件信息，返回文件名和路径
  * @param {object} fileInfos 文件信息对象

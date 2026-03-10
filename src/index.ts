@@ -1,8 +1,12 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { formatFileInfos, isMarkDown, formatFileName } from './utils'
+import { formatFileInfos, formatFileName, isMarkDown } from './utils'
 import type { DefaultTheme } from 'vitepress/types/default-theme'
-import type { FileInfo, Option } from '../types/custom'
+import type { FileInfo, Option } from './types'
+
+function toPosixPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/')
+}
 
 /**
  * 获取指定目录下的所有文件和子目录
@@ -11,113 +15,128 @@ import type { FileInfo, Option } from '../types/custom'
  * @param filesMap 文件和子目录数组
  * @returns 文件和子目录数组
  */
-function getFiles(dir: string, level = 1, filesMap: { [key: string]: any } = {}): FileInfo[] {
-  const files = fs.readdirSync(dir)
-  const result = [] as FileInfo[]
-  files.forEach((file) => {
-    const filePath = path.join(dir, file).toString().replace(/\\/g, '/')
-    const stats = fs.statSync(filePath)
-    if (stats.isDirectory()) {
-      // 递归读取子目录
-      let fileObj = {
-        name: file,
+function getFiles(dir: string, level = 1, filesMap: Record<string, FileInfo> = {}): FileInfo[] {
+  const normalizedDir = toPosixPath(dir)
+  const entries = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+
+  const result: FileInfo[] = []
+
+  for (const entry of entries) {
+    const filePath = toPosixPath(path.join(dir, entry.name))
+
+    if (entry.isDirectory()) {
+      const fileObj: FileInfo = {
+        name: entry.name,
         path: filePath,
         isDirectory: true,
         level,
-        parentPath: dir,
+        parentPath: normalizedDir,
       }
-      const subFiles = getFiles(filePath, level + 1, filesMap)
-      result.push(fileObj, ...subFiles)
-      filesMap[filePath] = fileObj
-    } else if (isMarkDown(file)) {
-      // 存储文件名和路径
-      let fileObj = {
-        name: formatFileName(file),
-        path: filePath,
-        level,
-        isDirectory: false,
-        parentPath: dir,
-      }
-      result.push(fileObj)
-      filesMap[filePath] = fileObj
-    }
-  })
 
-  return result.sort((a, b) => a.level - b.level || (b.isDirectory ? 1 : -1));
+      filesMap[filePath] = fileObj
+      result.push(fileObj, ...getFiles(filePath, level + 1, filesMap))
+      continue
+    }
+
+    if (!entry.isFile() || !isMarkDown(entry.name)) {
+      continue
+    }
+
+    const fileObj: FileInfo = {
+      name: formatFileName(entry.name),
+      path: filePath,
+      level,
+      isDirectory: false,
+      parentPath: normalizedDir,
+    }
+
+    filesMap[filePath] = fileObj
+    result.push(fileObj)
+  }
+
+  return result
 }
 
-/**
- * Adds a sidebar item to the sidebar map.
- * @param sidebarMap - The sidebar map object.
- * @param dir - The directory object.
- * @param file - The file object.
- */
-const addSidebarItem = (sidebarMap: { [key: string]: any }, dir: { path: string }, file: { name: string; path: string; isDirectory: boolean }) => {
-  if (!sidebarMap[dir.path]) {
-    sidebarMap[dir.path] = [
-      {
-        text: 'other',
-        items: [],
-      },
-    ]
-  }
-  if (file.isDirectory) {
-    sidebarMap[dir.path].push({
-      text: file.name,
-      items: [],
-    })
-  } else {
-    sidebarMap[dir.path][0].items.push({
-      text: file.name,
-      link: formatFileInfos(file).link,
+function isNestedUnder(filePath: string, parentDirPath: string): boolean {
+  return filePath.startsWith(`${parentDirPath}/`)
+}
+
+function sortFiles(left: FileInfo, right: FileInfo): number {
+  return left.level - right.level || left.path.localeCompare(right.path)
+}
+
+function createSidebarGroups(rootDir: FileInfo, files: FileInfo[]): DefaultTheme.SidebarItem[] {
+  const directChildren = files.filter((file) => file.parentPath === rootDir.path)
+  const sidebarGroups: DefaultTheme.SidebarItem[] = []
+
+  const rootMarkdownFiles = directChildren
+    .filter((file) => !file.isDirectory)
+    .map((file) => formatFileInfos(file))
+
+  if (rootMarkdownFiles.length > 0) {
+    sidebarGroups.push({
+      text: 'other',
+      items: rootMarkdownFiles,
     })
   }
+
+  const childDirectories = directChildren.filter((file) => file.isDirectory)
+
+  for (const childDirectory of childDirectories) {
+    const items = files
+      .filter((file) => !file.isDirectory && isNestedUnder(file.path, childDirectory.path))
+      .sort(sortFiles)
+      .map((file) => formatFileInfos(file))
+
+    if (items.length === 0) {
+      continue
+    }
+
+    sidebarGroups.push({
+      text: childDirectory.name,
+      items,
+    })
+  }
+
+  return sidebarGroups
 }
 
 export default function genNav(option: Option = { baseurl: './blog' }): {
   nav: DefaultTheme.NavItem[]
   sidebar: DefaultTheme.Sidebar
 } {
-  let filesMap: { [key: string]: FileInfo } = {}
-  const files = getFiles(option.baseurl, 1, filesMap)
-
-  let nav: DefaultTheme.NavItem[] = []
-  const sidebarMap: DefaultTheme.Sidebar = {}
+  const baseurl = toPosixPath(option.baseurl ?? './blog')
+  const filesMap: Record<string, FileInfo> = {}
+  const files = getFiles(baseurl, 1, filesMap)
+  const nav: DefaultTheme.NavItem[] = []
   const sidebar: DefaultTheme.Sidebar = {}
-  const rootDirs = files.filter((file: FileInfo) => file.isDirectory && file.level == 1)
+
+  const rootDirs = files.filter((file) => file.isDirectory && file.parentPath === baseurl)
 
   for (const dir of rootDirs) {
-    dir.items = []
-    for (const file of files) {
-      if (file.parentPath === dir.path) {
-        addSidebarItem(sidebarMap, dir, file)
-      }
+    const sidebarItems = createSidebarGroups(dir, files)
+
+    if (sidebarItems.length === 0) {
+      continue
     }
-  }
 
-
-  for (const key of Object.keys(sidebarMap)) {
-    const val = sidebarMap[key]
-    for (const file of files) {
-      if (file.path.includes(key) && !file.isDirectory) {
-        const index = val.findIndex((item) => file.path.includes(item.text))
-        if (index === -1) continue
-        val[index].items.push(formatFileInfos(file))
-      }
-    }
-  }
-
-  for (const [key, value] of Object.entries(sidebarMap)) {
-    const sidebarItem = value.filter((item) => item.items.length > 0)
-    if(sidebarItem.length === 0) continue
-    sidebar[key] = sidebarItem
+    sidebar[dir.path] = sidebarItems
     nav.push({
-      text: filesMap[key].name,
-      items: value.reduce<DefaultTheme.NavItemWithLink[]>((pre, cur) => {
-        let first = cur.items[0]
-        if (!first) return pre
-        pre.push({ text: cur.text === 'other' ? first.text : cur.text, link: first.link })
-        return pre
+      text: filesMap[dir.path].name,
+      items: sidebarItems.reduce<DefaultTheme.NavItemWithLink[]>((items, group) => {
+        const first = group.items?.[0]
+
+        if (!first) {
+          return items
+        }
+
+        items.push({
+          text: group.text === 'other' ? first.text : group.text,
+          link: first.link,
+        })
+        return items
       }, []),
     })
   }

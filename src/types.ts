@@ -4,7 +4,7 @@ export type FileInfo = {
   level: number
   isDirectory: boolean
   parentPath: string
-  items?: []
+  items?: FileInfo[]
 }
 
 export type Option = {
