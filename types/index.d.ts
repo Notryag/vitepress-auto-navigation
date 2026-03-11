@@ -1,5 +1,5 @@
-import type { DefaultTheme } from 'vitepress/types/default-theme';
-import type { Option } from './types';
+import type { DefaultTheme } from "vitepress/types/default-theme";
+import type { Option } from "./types";
 export default function genNav(option?: Option): {
     nav: DefaultTheme.NavItem[];
     sidebar: DefaultTheme.Sidebar;

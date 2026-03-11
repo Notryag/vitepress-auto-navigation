@@ -22,13 +22,14 @@
 
 ## 当前约定
 
-给定 `baseurl` 后，生成器遵循以下规则：
+给定 `sourceDir` 和 `routeBase` 后，生成器遵循以下规则：
 
 - 一级目录生成顶层 `nav`
 - 一级目录下的 Markdown 文件归入名为 `other` 的侧边栏分组
 - 二级目录生成侧边栏分组
 - 二级目录下的所有 Markdown 文件都会被收集到该分组中
-- `baseurl` 根目录下的 Markdown 文件会被忽略
+- `sourceDir` 根目录下的 Markdown 文件会被忽略
+- `README.md` 和 `index.md` 会解析为栏目根路由
 
 这让包的行为更可预测，但也意味着它是有边界的。
 
@@ -44,7 +45,8 @@ pnpm add vitepress-auto-navigation
 import autoNavigation from 'vitepress-auto-navigation'
 
 const { nav, sidebar } = autoNavigation({
-  baseurl: './docs',
+  sourceDir: './docs',
+  routeBase: '/docs',
 })
 
 export default {
@@ -72,12 +74,23 @@ docs
 会生成：
 
 - `nav`: `guide`、`api`
-- `sidebar['docs/guide']`: `other`、`config`
-- `sidebar['docs/api']`: `other`
+- `sidebar['/docs/guide/']`: `other`、`config`
+- `sidebar['/docs/api/']`: `other`
 
 ## 范围
 
 这个包当前只解决一个窄问题：基于稳定的目录语义，从文档树推导出导航配置。
+
+关键选项：
+
+- `sourceDir`：实际扫描的文件系统目录
+- `routeBase`：生成链接和 sidebar key 时使用的路由前缀
+- `baseurl`：`sourceDir` 的兼容别名，保留是为了向后兼容
+- `extensions`：要纳入索引的扩展名，例如 `['.md', '.js', '.ts']`
+- `ignore`：额外忽略的目录或文件名
+- `groupLabel`：替换默认的 `other` 分组名
+- `resolveText`：自定义文件项显示文本
+- `resolveLink`：自定义文件项链接
 
 当前设计的非目标：
 
@@ -86,6 +99,29 @@ docs
 - 支持多语言标签生成
 - 自动生成外链导航
 - 支持任意深度映射到导航结构
+
+如果你的站点路由前缀和实际扫描目录不同，最好显式同时传入 `sourceDir` 和 `routeBase`。
+
+## 代码文件
+
+你也可以把 `.js`、`.ts`、`.html` 这类代码文件纳入索引，但它们本身不是 VitePress 页面。
+
+做法是先用 `extensions` 把这些文件纳入扫描，再用 `resolveLink` 把它们映射到真正存在的页面路由：
+
+```ts
+const { nav, sidebar } = autoNavigation({
+  sourceDir: './docs',
+  routeBase: '/docs',
+  extensions: ['.md', '.js', '.ts'],
+  resolveText: (file) => file.relativePath.endsWith('.md') ? file.name : `code:${file.name}`,
+  resolveLink: (file) =>
+    file.relativePath.endsWith('.md')
+      ? file.routePath
+      : `/snippets/${file.relativePath.replace(/\.(js|ts)$/, '')}`,
+})
+```
+
+这种方式适合你已经准备好了包装 Markdown 页面，或者站点里本来就有专门展示源码的自定义路由。
 
 ## 路线图
 

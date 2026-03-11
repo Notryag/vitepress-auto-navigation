@@ -22,13 +22,14 @@ Do not use this package if:
 
 ## Current Convention
 
-Given `baseurl`, the generator follows these rules:
+Given `sourceDir` and `routeBase`, the generator follows these rules:
 
 - first-level directories become top-level `nav`
 - Markdown files directly under a first-level directory go into a sidebar group named `other`
 - second-level directories become sidebar groups
 - all Markdown files nested under a second-level directory are collected into that group
-- Markdown files directly under `baseurl` are ignored
+- Markdown files directly under `sourceDir` are ignored
+- `README.md` and `index.md` resolve to the section root route
 
 This makes the package predictable, but also intentionally limited.
 
@@ -44,7 +45,8 @@ pnpm add vitepress-auto-navigation
 import autoNavigation from 'vitepress-auto-navigation'
 
 const { nav, sidebar } = autoNavigation({
-  baseurl: './docs',
+  sourceDir: './docs',
+  routeBase: '/docs',
 })
 
 export default {
@@ -72,12 +74,23 @@ docs
 Generates:
 
 - `nav`: `guide`, `api`
-- `sidebar['docs/guide']`: `other`, `config`
-- `sidebar['docs/api']`: `other`
+- `sidebar['/docs/guide/']`: `other`, `config`
+- `sidebar['/docs/api/']`: `other`
 
 ## Scope
 
 This package currently solves one narrow problem: derive navigation from a docs tree with stable directory semantics.
+
+Key options:
+
+- `sourceDir`: filesystem directory to scan
+- `routeBase`: route prefix used for generated links and sidebar keys
+- `baseurl`: legacy alias for `sourceDir`; kept for backward compatibility
+- `extensions`: content extensions to include, for example `['.md', '.js', '.ts']`
+- `ignore`: extra directory or file names to skip
+- `groupLabel`: replace the default `other` label
+- `resolveText`: customize the text for generated file items
+- `resolveLink`: customize the link for generated file items
 
 Non-goals for the current design:
 
@@ -86,6 +99,29 @@ Non-goals for the current design:
 - localized labels
 - automatic external link generation
 - arbitrary depth-to-navigation mapping
+
+If your route prefix differs from the scanned directory, set both `sourceDir` and `routeBase` explicitly.
+
+## Code Files
+
+You can also index code files such as `.js`, `.ts`, or `.html`, but they are not VitePress pages by themselves.
+
+Use `extensions` to include them, then map them to real routes with `resolveLink`:
+
+```ts
+const { nav, sidebar } = autoNavigation({
+  sourceDir: './docs',
+  routeBase: '/docs',
+  extensions: ['.md', '.js', '.ts'],
+  resolveText: (file) => file.relativePath.endsWith('.md') ? file.name : `code:${file.name}`,
+  resolveLink: (file) =>
+    file.relativePath.endsWith('.md')
+      ? file.routePath
+      : `/snippets/${file.relativePath.replace(/\.(js|ts)$/, '')}`,
+})
+```
+
+This pattern works well when your site has wrapper Markdown pages or custom routes for showing raw source files.
 
 ## Roadmap
 

@@ -1,24 +1,15 @@
-/**
- * 格式化文件信息，返回文件名和路径
- * @param {object} fileInfos 文件信息对象
- * @returns {object} 格式化后的文件对象
- */
-export declare const formatFileInfos: (fileInfos: {
-    name: string;
-    path: string;
-}) => {
+import type { FileInfo } from "./types";
+export declare function toPosixPath(filePath: string): string;
+export declare function normalizeRouteBase(routeBase: string): string;
+export declare function normalizeExtensions(extensions?: string[]): string[];
+export declare function normalizeIgnore(ignore?: string[]): string[];
+export declare function stripKnownExtension(fileName: string, extensions: string[]): string;
+export declare function createDirectoryRoute(routeBase: string, relativePath: string): string;
+export declare function createFileRoute(routeBase: string, relativePath: string, extensions: string[]): string;
+export declare const formatFileInfos: (fileInfos: Pick<FileInfo, "name" | "routePath">) => {
     text: string;
     link: string;
 };
-/**
- * 格式化文件名，去掉后缀名
- * @param {string} fileName 文件名
- * @returns {string} 格式化后的文件名
- */
-export declare const formatFileName: (fileName: string) => string;
-/**
- * 判断文件是否为Markdown文件
- * @param {string} fileName 文件名
- * @returns {boolean} 是否为Markdown文件
- */
-export declare const isMarkDown: (fileName: string) => boolean;
+export declare const formatFileName: (fileName: string, extensions?: string[]) => string;
+export declare const isContentFile: (fileName: string, extensions?: string[]) => boolean;
+export declare const shouldIgnoreEntry: (entryName: string, ignore?: string[]) => boolean;

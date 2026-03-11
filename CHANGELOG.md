@@ -2,6 +2,26 @@
 
 [中文版本](./CHANGELOG.zh-CN.md)
 
+## 0.2.0 - 2026-03-11
+
+### Changed
+
+- publish both ESM and CommonJS entry points so modern VitePress configs can import the package directly
+- split filesystem scanning from route generation with `sourceDir` and `routeBase`
+- normalize generated sidebar keys and links to site routes instead of local disk paths
+- map `README.md` and `index.md` files to section root routes
+- add default ignore rules for directories such as `.git`, `.vitepress`, `node_modules`, and `dist`
+
+### Added
+
+- support `extensions` so non-Markdown files can be indexed when needed
+- support `resolveText` and `resolveLink` hooks so users can surface code files through custom routes
+- add coverage for route generation, ignored directories, section root mapping, and custom code-file links
+
+### Documentation
+
+- document the new `sourceDir`, `routeBase`, `extensions`, `resolveText`, and `resolveLink` options
+
 ## 0.1.0 - 2026-03-10
 
 ### Changed

@@ -28,12 +28,8 @@ function createFixture(structure: Record<string, string>): string {
   return rootDir
 }
 
-function toFixturePath(rootDir: string, relativePath: string): string {
-  return path.join(rootDir, relativePath).replace(/\\/g, '/')
-}
-
 describe('genNav', () => {
-  it('generates nav and sidebar from first-level directories', () => {
+  it('generates nav and sidebar from first-level directories using routeBase', () => {
     const rootDir = createFixture({
       'intro.md': '# ignored at root',
       'guide/getting-started.md': '# getting started',
@@ -42,7 +38,7 @@ describe('genNav', () => {
       'api/reference.md': '# reference',
     })
 
-    const { nav, sidebar } = genNav({ baseurl: rootDir })
+    const { nav, sidebar } = genNav({ sourceDir: rootDir, routeBase: '/docs' })
 
     expect(nav).toEqual([
       {
@@ -50,7 +46,7 @@ describe('genNav', () => {
         items: [
           {
             text: 'reference',
-            link: toFixturePath(rootDir, 'api/reference.md'),
+            link: '/docs/api/reference',
           },
         ],
       },
@@ -59,35 +55,35 @@ describe('genNav', () => {
         items: [
           {
             text: 'getting-started',
-            link: toFixturePath(rootDir, 'guide/getting-started.md'),
+            link: '/docs/guide/getting-started',
           },
           {
             text: 'config',
-            link: toFixturePath(rootDir, 'guide/config/basic.md'),
+            link: '/docs/guide/config/basic',
           },
         ],
       },
     ])
 
     expect(sidebar).toEqual({
-      [toFixturePath(rootDir, 'api')]: [
+      '/docs/api/': [
         {
           text: 'other',
           items: [
             {
               text: 'reference',
-              link: toFixturePath(rootDir, 'api/reference.md'),
+              link: '/docs/api/reference',
             },
           ],
         },
       ],
-      [toFixturePath(rootDir, 'guide')]: [
+      '/docs/guide/': [
         {
           text: 'other',
           items: [
             {
               text: 'getting-started',
-              link: toFixturePath(rootDir, 'guide/getting-started.md'),
+              link: '/docs/guide/getting-started',
             },
           ],
         },
@@ -96,11 +92,59 @@ describe('genNav', () => {
           items: [
             {
               text: 'basic',
-              link: toFixturePath(rootDir, 'guide/config/basic.md'),
+              link: '/docs/guide/config/basic',
             },
             {
               text: 'deep-dive',
-              link: toFixturePath(rootDir, 'guide/config/advanced/deep-dive.md'),
+              link: '/docs/guide/config/advanced/deep-dive',
+            },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('defaults to root-based routes when sourceDir is absolute', () => {
+    const rootDir = createFixture({
+      'guide/api/overview.md': '# api overview',
+      'guide/api-client/setup.md': '# api client setup',
+    })
+
+    const { nav, sidebar } = genNav({ sourceDir: rootDir })
+
+    expect(nav).toEqual([
+      {
+        text: 'guide',
+        items: [
+          {
+            text: 'api',
+            link: '/guide/api/overview',
+          },
+          {
+            text: 'api-client',
+            link: '/guide/api-client/setup',
+          },
+        ],
+      },
+    ])
+
+    expect(sidebar).toEqual({
+      '/guide/': [
+        {
+          text: 'api',
+          items: [
+            {
+              text: 'overview',
+              link: '/guide/api/overview',
+            },
+          ],
+        },
+        {
+          text: 'api-client',
+          items: [
+            {
+              text: 'setup',
+              link: '/guide/api-client/setup',
             },
           ],
         },
@@ -115,7 +159,7 @@ describe('genNav', () => {
       'guide/api-client/nested/troubleshooting.md': '# troubleshooting',
     })
 
-    const { nav, sidebar } = genNav({ baseurl: rootDir })
+    const { nav, sidebar } = genNav({ sourceDir: rootDir, routeBase: '/docs' })
 
     expect(nav).toEqual([
       {
@@ -123,24 +167,24 @@ describe('genNav', () => {
         items: [
           {
             text: 'api',
-            link: toFixturePath(rootDir, 'guide/api/overview.md'),
+            link: '/docs/guide/api/overview',
           },
           {
             text: 'api-client',
-            link: toFixturePath(rootDir, 'guide/api-client/setup.md'),
+            link: '/docs/guide/api-client/setup',
           },
         ],
       },
     ])
 
     expect(sidebar).toEqual({
-      [toFixturePath(rootDir, 'guide')]: [
+      '/docs/guide/': [
         {
           text: 'api',
           items: [
             {
               text: 'overview',
-              link: toFixturePath(rootDir, 'guide/api/overview.md'),
+              link: '/docs/guide/api/overview',
             },
           ],
         },
@@ -149,11 +193,11 @@ describe('genNav', () => {
           items: [
             {
               text: 'setup',
-              link: toFixturePath(rootDir, 'guide/api-client/setup.md'),
+              link: '/docs/guide/api-client/setup',
             },
             {
               text: 'troubleshooting',
-              link: toFixturePath(rootDir, 'guide/api-client/nested/troubleshooting.md'),
+              link: '/docs/guide/api-client/nested/troubleshooting',
             },
           ],
         },
@@ -161,35 +205,124 @@ describe('genNav', () => {
     })
   })
 
-  it('skips empty directories that have no markdown descendants', () => {
+  it('skips ignored directories and maps README files to section roots', () => {
     const rootDir = createFixture({
+      'guide/README.md': '# guide home',
       'guide/filled/page.md': '# page',
-      'guide/empty/.gitkeep': '',
+      'guide/node_modules/ignored.md': '# ignored',
       'empty-root/assets/image.png': 'png',
     })
 
-    const { nav, sidebar } = genNav({ baseurl: rootDir })
+    const { nav, sidebar } = genNav({
+      sourceDir: rootDir,
+      routeBase: '/docs',
+      groupLabel: 'overview',
+    })
 
     expect(nav).toEqual([
       {
         text: 'guide',
         items: [
           {
+            text: 'README',
+            link: '/docs/guide/',
+          },
+          {
             text: 'filled',
-            link: toFixturePath(rootDir, 'guide/filled/page.md'),
+            link: '/docs/guide/filled/page',
           },
         ],
       },
     ])
 
     expect(sidebar).toEqual({
-      [toFixturePath(rootDir, 'guide')]: [
+      '/docs/guide/': [
+        {
+          text: 'overview',
+          items: [
+            {
+              text: 'README',
+              link: '/docs/guide/',
+            },
+          ],
+        },
         {
           text: 'filled',
           items: [
             {
               text: 'page',
-              link: toFixturePath(rootDir, 'guide/filled/page.md'),
+              link: '/docs/guide/filled/page',
+            },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('supports custom text and links for non-markdown assets', () => {
+    const rootDir = createFixture({
+      'guide/intro.md': '# intro',
+      'guide/snippets/demo.js': 'console.log("demo")',
+      'guide/snippets/helper.ts': 'export const helper = true',
+    })
+
+    const { nav, sidebar } = genNav({
+      sourceDir: rootDir,
+      routeBase: '/docs',
+      extensions: ['.md', '.js', '.ts'],
+      resolveText: (file) => {
+        if (file.relativePath.endsWith('.js') || file.relativePath.endsWith('.ts')) {
+          return `code:${file.name}`
+        }
+
+        return file.name
+      },
+      resolveLink: (file) => {
+        if (file.relativePath.endsWith('.js') || file.relativePath.endsWith('.ts')) {
+          return `/snippets/${file.relativePath.replace(/\.(js|ts)$/, '')}`
+        }
+
+        return file.routePath
+      },
+    })
+
+    expect(nav).toEqual([
+      {
+        text: 'guide',
+        items: [
+          {
+            text: 'intro',
+            link: '/docs/guide/intro',
+          },
+          {
+            text: 'snippets',
+            link: '/snippets/guide/snippets/demo',
+          },
+        ],
+      },
+    ])
+
+    expect(sidebar).toEqual({
+      '/docs/guide/': [
+        {
+          text: 'other',
+          items: [
+            {
+              text: 'intro',
+              link: '/docs/guide/intro',
+            },
+          ],
+        },
+        {
+          text: 'snippets',
+          items: [
+            {
+              text: 'code:demo',
+              link: '/snippets/guide/snippets/demo',
+            },
+            {
+              text: 'code:helper',
+              link: '/snippets/guide/snippets/helper',
             },
           ],
         },

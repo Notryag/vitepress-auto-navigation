@@ -1,21 +1,54 @@
-import * as fs from 'fs'
-import * as path from 'path'
-import { formatFileInfos, formatFileName, isMarkDown } from './utils'
-import type { DefaultTheme } from 'vitepress/types/default-theme'
-import type { FileInfo, Option } from './types'
+import * as fs from "node:fs"
+import * as path from "node:path"
+import type { DefaultTheme } from "vitepress/types/default-theme"
+import type { FileInfo, Option, ResolveLink, ResolveText } from "./types"
+import {
+  createDirectoryRoute,
+  createFileRoute,
+  formatFileInfos,
+  formatFileName,
+  isContentFile,
+  normalizeExtensions,
+  normalizeRouteBase,
+  shouldIgnoreEntry,
+  toPosixPath,
+} from "./utils"
 
-function toPosixPath(filePath: string): string {
-  return filePath.replace(/\\/g, '/')
+type ResolvedOption = {
+  sourceDir: string
+  routeBase: string
+  extensions: string[]
+  ignore: string[]
+  groupLabel: string
+  resolveText?: ResolveText
+  resolveLink?: ResolveLink
 }
 
-/**
- * 获取指定目录下的所有文件和子目录
- * @param dir 目录路径
- * @param level 目录层级
- * @param filesMap 文件和子目录数组
- * @returns 文件和子目录数组
- */
-function getFiles(dir: string, level = 1, filesMap: Record<string, FileInfo> = {}): FileInfo[] {
+function resolveOptions(option: Option): ResolvedOption {
+  const sourceDir = toPosixPath(option.sourceDir ?? option.baseurl ?? "./blog")
+  const routeBaseInput =
+    option.routeBase ??
+    (option.baseurl && !path.isAbsolute(option.baseurl) ? option.baseurl : undefined) ??
+    (!path.isAbsolute(sourceDir) ? sourceDir : "")
+  const routeBase = normalizeRouteBase(routeBaseInput)
+
+  return {
+    sourceDir,
+    routeBase,
+    extensions: normalizeExtensions(option.extensions),
+    ignore: option.ignore ?? [],
+    groupLabel: option.groupLabel ?? "other",
+    resolveText: option.resolveText,
+    resolveLink: option.resolveLink,
+  }
+}
+
+function getFiles(
+  dir: string,
+  settings: ResolvedOption,
+  level = 1,
+  filesMap: Record<string, FileInfo> = {},
+): FileInfo[] {
   const normalizedDir = toPosixPath(dir)
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
@@ -24,32 +57,49 @@ function getFiles(dir: string, level = 1, filesMap: Record<string, FileInfo> = {
   const result: FileInfo[] = []
 
   for (const entry of entries) {
+    if (shouldIgnoreEntry(entry.name, settings.ignore)) {
+      continue
+    }
+
     const filePath = toPosixPath(path.join(dir, entry.name))
+    const relativePath = toPosixPath(path.relative(settings.sourceDir, filePath))
 
     if (entry.isDirectory()) {
       const fileObj: FileInfo = {
         name: entry.name,
         path: filePath,
+        relativePath,
+        routePath: createDirectoryRoute(settings.routeBase, relativePath),
         isDirectory: true,
         level,
         parentPath: normalizedDir,
       }
 
       filesMap[filePath] = fileObj
-      result.push(fileObj, ...getFiles(filePath, level + 1, filesMap))
+      result.push(fileObj, ...getFiles(filePath, settings, level + 1, filesMap))
       continue
     }
 
-    if (!entry.isFile() || !isMarkDown(entry.name)) {
+    if (!entry.isFile() || !isContentFile(entry.name, settings.extensions)) {
       continue
     }
 
     const fileObj: FileInfo = {
-      name: formatFileName(entry.name),
+      name: formatFileName(entry.name, settings.extensions),
       path: filePath,
+      relativePath,
+      routePath: createFileRoute(settings.routeBase, relativePath, settings.extensions),
       level,
       isDirectory: false,
       parentPath: normalizedDir,
+    }
+
+    if (settings.resolveText) {
+      fileObj.name = settings.resolveText(fileObj)
+    }
+
+    if (settings.resolveLink) {
+      fileObj.routePath = settings.resolveLink(fileObj)
     }
 
     filesMap[filePath] = fileObj
@@ -67,7 +117,11 @@ function sortFiles(left: FileInfo, right: FileInfo): number {
   return left.level - right.level || left.path.localeCompare(right.path)
 }
 
-function createSidebarGroups(rootDir: FileInfo, files: FileInfo[]): DefaultTheme.SidebarItem[] {
+function createSidebarGroups(
+  rootDir: FileInfo,
+  files: FileInfo[],
+  groupLabel: string,
+): DefaultTheme.SidebarItem[] {
   const directChildren = files.filter((file) => file.parentPath === rootDir.path)
   const sidebarGroups: DefaultTheme.SidebarItem[] = []
 
@@ -77,7 +131,7 @@ function createSidebarGroups(rootDir: FileInfo, files: FileInfo[]): DefaultTheme
 
   if (rootMarkdownFiles.length > 0) {
     sidebarGroups.push({
-      text: 'other',
+      text: groupLabel,
       items: rootMarkdownFiles,
     })
   }
@@ -103,26 +157,26 @@ function createSidebarGroups(rootDir: FileInfo, files: FileInfo[]): DefaultTheme
   return sidebarGroups
 }
 
-export default function genNav(option: Option = { baseurl: './blog' }): {
+export default function genNav(option: Option = { sourceDir: "./blog" }): {
   nav: DefaultTheme.NavItem[]
   sidebar: DefaultTheme.Sidebar
 } {
-  const baseurl = toPosixPath(option.baseurl ?? './blog')
+  const settings = resolveOptions(option)
   const filesMap: Record<string, FileInfo> = {}
-  const files = getFiles(baseurl, 1, filesMap)
+  const files = getFiles(settings.sourceDir, settings, 1, filesMap)
   const nav: DefaultTheme.NavItem[] = []
   const sidebar: DefaultTheme.Sidebar = {}
 
-  const rootDirs = files.filter((file) => file.isDirectory && file.parentPath === baseurl)
+  const rootDirs = files.filter((file) => file.isDirectory && file.parentPath === settings.sourceDir)
 
   for (const dir of rootDirs) {
-    const sidebarItems = createSidebarGroups(dir, files)
+    const sidebarItems = createSidebarGroups(dir, files, settings.groupLabel)
 
     if (sidebarItems.length === 0) {
       continue
     }
 
-    sidebar[dir.path] = sidebarItems
+    sidebar[dir.routePath] = sidebarItems
     nav.push({
       text: filesMap[dir.path].name,
       items: sidebarItems.reduce<DefaultTheme.NavItemWithLink[]>((items, group) => {
@@ -133,7 +187,7 @@ export default function genNav(option: Option = { baseurl: './blog' }): {
         }
 
         items.push({
-          text: group.text === 'other' ? first.text : group.text,
+          text: group.text === settings.groupLabel ? first.text : group.text,
           link: first.link,
         })
         return items
